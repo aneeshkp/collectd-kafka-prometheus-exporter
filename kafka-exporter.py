@@ -5,9 +5,17 @@ import requests
 import sys
 import time
 import collections
+import random
 from kafka import KafkaConsumer
 
 class KafkaCollector(object):
+   
+
+   def __init__(self,consumer):
+       self.consumer=consumer
+       #self.consumer = KafkaConsumer(bootstrap_servers='localhost:9092',enable_auto_commit=True,auto_offset_reset='earliest')
+       #self.consumer.subscribe(['collectd-topic-new3'])
+
 
    @staticmethod
    def _serialize_identifier(index, v):
@@ -25,22 +33,43 @@ class KafkaCollector(object):
    def collect2(self):
 	yield GaugeMetricFamily('my_gauge', 'Help text', value=7)
         c = CounterMetricFamily('my_counter_total', 'Help text', labels=['foo'])
-        c.add_metric(['bar'], 1.7)
-        c.add_metric(['baz'], 3.8)
+        c.add_metric(['bar'], random.random())
+        c.add_metric(['baz'], random.random())
         yield c
+
    def collect(self):
-     consumer = KafkaConsumer(bootstrap_servers='localhost:9092',
-                                  auto_offset_reset='earliest')
-     consumer.subscribe(['collectd-topic-new'])
-     for message in consumer:
-         #print("####################################\n")
-         #print (message.value)
+     #consumer = KafkaConsumer(bootstrap_servers='localhost:9092',auto_offset_reset='largest')
+     #consumer.subscribe(['collectd-topic-new2'])
+     print "calling collect"
+     count=1
+     for message in self.consumer:
+         print("####################################\n")
+         print message
+         
          parsed_json=json.loads(message.value)
          host_id = "kafka:" + parsed_json[0]["host"].replace("/", "_")
          host=parsed_json[0]["host"]
-         metrics=self.getmetrics(parsed_json[0],parsed_json[0])
-         print metrics.type
-         yield  metrics
+         dataset=parsed_json[0]
+         value_list=parsed_json[0]
+         for index,item in enumerate(dataset["values"]):
+           name=self.get_metric_family_name(value_list,dataset["dsnames"][index],dataset["dstypes"][index])
+           metric=self.metric_family_create(name,dataset,value_list,dataset["dstypes"][index])
+           data=self.getdata(dataset,value_list,index)
+           metric.add_metric(data["labels"],data["values"])
+           yield metric 
+
+         #metric= self.getmetrics(parsed_json[0],parsed_json[0])
+         #metrics.append(metric)
+         #print metric.type
+         #break
+         #count+=1 
+         #if count>=10:
+         #   print count
+         #   break
+
+
+          
+        
 
 
    # metric_family_name creates a metric family's name from a data source. This is
@@ -58,7 +87,7 @@ class KafkaCollector(object):
     fields.append(value_list["type"])
 
     if dsname !="value":
-       fields.append(dsname)
+      fields.append(dsname)
 
     fields.append(value_list["host"])
     
@@ -88,17 +117,14 @@ class KafkaCollector(object):
      metrics_type=()
      metrics={}
      name=self.get_metric_family_name(value_list,dataset["dsnames"][0],dataset["dstypes"][0])
-     print "Name if metric %s",name
      metric=self.metric_family_create(name,dataset,value_list,dataset["dstypes"][0])
-     print "MATRIXXXXXXX"
-     print metric.type
      for index,item in enumerate(dataset["values"]):
         data=self.getdata(dataset,value_list,index)
-        print "dta=%s\n",data
-        metric.add_metric(['foo'],data["values"])
-        # metric.add_metric(data["labels"],data["values"])
+        #print "dta=%s\n",data["labels"]
+        # metric.add_metric(['foo'],index)
+        metric.add_metric(data["labels"],data["values"])
 
-     return metrics
+     return metric
     # for index,item in enumerate(dataset["values"]):
     #    name=self.metric_family_get(dataset,value_list,dataset["dsnames"][index],dataset["dstypes"])
     #    if name not in metrics_type:
@@ -116,9 +142,12 @@ class KafkaCollector(object):
     # return metrics
 
    def getdata(self,dataset,value_list,index):
-	labels=[value_list["type_instance"],value_list["type"],value_list["plugin_instance"],value_list["host"],value_list["dsnames"][index] ]
+	labels=[value_list["type"].encode("ascii","replace"),value_list["time"],value_list["interval"],
+		value_list["plugin_instance"].encode("ascii","replace"),
+                value_list["host"].encode("ascii","replace"),value_list["dsnames"][index].encode("ascii","replace") ]
         data={}
-        data["labels"]=[value_list["dsnames"][index].encode("ascii","replace")]
+        #labels=[value_list["dsnames"][index].encode("ascii","replace")]
+        data["labels"]=labels
         data["values"]=dataset["values"][index]
         return data
 
@@ -142,15 +171,15 @@ class KafkaCollector(object):
      #label.append("values"]=dataset["values"][index]
      data1={}
      data1["labels"]=labels
-     data1["values"]=dataset["values"][index]
+     data1["values"]=random.random() #dataset["values"][index]
      return data1
 
 
 if __name__ == '__main__':
-    # Usage: json_exporter.py port endpoint
-    #start_http_server(int(sys.argv[1]))
     start_http_server(int(sys.argv[1]))
-    REGISTRY.register(KafkaCollector())
-
+    consumer = KafkaConsumer(bootstrap_servers='localhost:9092',enable_auto_commit=True,auto_offset_reset='largest')
+    consumer.subscribe(['collectd-topic-new4'])
+    #MYREGISTRY = CollectorRegistry(auto_describe=False)
+    REGISTRY.register(KafkaCollector(consumer))
     while True: time.sleep(1)
 
