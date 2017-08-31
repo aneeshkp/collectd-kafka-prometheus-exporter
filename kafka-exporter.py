@@ -9,13 +9,11 @@ import random
 from kafka import KafkaConsumer
 
 class KafkaCollector(object):
-   
 
-   def __init__(self,consumer):
-       self.consumer=consumer
-       #self.consumer = KafkaConsumer(bootstrap_servers='localhost:9092',enable_auto_commit=True,auto_offset_reset='earliest')
-       #self.consumer.subscribe(['collectd-topic-new3'])
 
+   def __init__(self):
+       self.consumer = KafkaConsumer(bootstrap_servers='localhost:9092',enable_auto_commit=True,auto_offset_reset='earliest',consumer_timeout_ms=1000)
+       self.consumer.subscribe(['collectd-topic-x'])
 
    @staticmethod
    def _serialize_identifier(index, v):
@@ -38,14 +36,16 @@ class KafkaCollector(object):
         yield c
 
    def collect(self):
-     #consumer = KafkaConsumer(bootstrap_servers='localhost:9092',auto_offset_reset='largest')
-     #consumer.subscribe(['collectd-topic-new2'])
+     consumer = KafkaConsumer(bootstrap_servers='localhost:9092',enable_auto_commit=True,auto_offset_reset='earliest',consumer_timeout_ms=1000)
+     consumer.subscribe(['collectd-topic-x'])
+     #consumer.seek(0,2)
+     consumer.max_buffer_size=0
      print "calling collect"
      count=1
-     for message in self.consumer:
+     for message in consumer:
          print("####################################\n")
          print message
-         
+
          parsed_json=json.loads(message.value)
          host_id = "kafka:" + parsed_json[0]["host"].replace("/", "_")
          host=parsed_json[0]["host"]
@@ -56,20 +56,20 @@ class KafkaCollector(object):
            metric=self.metric_family_create(name,dataset,value_list,dataset["dstypes"][index])
            data=self.getdata(dataset,value_list,index)
            metric.add_metric(data["labels"],data["values"])
-           yield metric 
+           yield metric
 
          #metric= self.getmetrics(parsed_json[0],parsed_json[0])
          #metrics.append(metric)
          #print metric.type
          #break
-         #count+=1 
+         #count+=1
          #if count>=10:
          #   print count
          #   break
 
 
-          
-        
+
+
 
 
    # metric_family_name creates a metric family's name from a data source. This is
@@ -90,7 +90,7 @@ class KafkaCollector(object):
       fields.append(dsname)
 
     fields.append(value_list["host"])
-    
+
 
     if type == "counter" or type =="derive":
        fields.append("total")
@@ -151,15 +151,15 @@ class KafkaCollector(object):
         data["values"]=dataset["values"][index]
         return data
 
-         
+
    def getdata2(self,dataset,value_list,index):
      data=()
      labels=[]
      if len(value_list["type_instance"])>0:
         if len(value_list["plugin_instance"])==0:
            labels[value_list["plugin"]]=value_list["type_instance"]
-              
-      
+
+
      labels["type"]=value_list["type"]
      if len(value_list["plugin_instance"])>0:
         labels[value_list["plugin"]]=value_list["plugin_instance"]
@@ -177,9 +177,7 @@ class KafkaCollector(object):
 
 if __name__ == '__main__':
     start_http_server(int(sys.argv[1]))
-    consumer = KafkaConsumer(bootstrap_servers='localhost:9092',enable_auto_commit=True,auto_offset_reset='largest')
-    consumer.subscribe(['collectd-topic-new4'])
-    #MYREGISTRY = CollectorRegistry(auto_describe=False)
-    REGISTRY.register(KafkaCollector(consumer))
-    while True: time.sleep(1)
 
+    #MYREGISTRY = CollectorRegistry(auto_describe=False)
+    REGISTRY.register(KafkaCollector())
+    while True: time.sleep(1)
