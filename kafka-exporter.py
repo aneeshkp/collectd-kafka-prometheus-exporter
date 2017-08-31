@@ -1,3 +1,4 @@
+#!/usr/bin/python
 from prometheus_client import start_http_server,CollectorRegistry
 from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily, REGISTRY
 import json
